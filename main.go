@@ -75,7 +75,7 @@ func init() {
 		4 - error, start and end, warning, access granted and denided, request from squid `)
 	// flag.IntVar(&config.ttl, "ttl", 300, "Defines the time after which data from the database will be updated in seconds")
 	flag.Parse()
-	if config.typedb != "mysql" || config.typedb != "postgres" {
+	if (config.typedb != "mysql") || (config.typedb != "postgres") {
 		chkM("Error. typedb must be 'mysql' or 'postgres'.", nil)
 	}
 	if config.userDB == "" {
@@ -86,7 +86,7 @@ func init() {
 	}
 	if config.logLevel != 0 {
 		log.SetFlags(log.Ldate | log.Ltime)
-		toLog(config.logLevel, 1, "quoteblock | Init started")
+		toLog(config.logLevel, 1, "go-fetch | Init started")
 		fl, err := os.OpenFile(config.fileLog, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 		chkM(fmt.Sprintf("Error opening to write log file (%v): ", config.fileLog), err)
 		defer fl.Close()
@@ -187,6 +187,9 @@ func (s *storeType) parseLineToStruct(line string) (lineOfLogType, error) {
 	if len(valueArray) == 0 {          // проверяем длину строки, чтобы убедиться что строка нормально распарсилась\её формат
 		return lineOut, fmt.Errorf("Error, string is empty") // если это не так то следующая линия
 	}
+	if config.lastDate <= valueArray[0] {
+		return lineOut, fmt.Errorf("This is line already in DB")
+	}
 	lineOut.date = valueArray[0]
 	// lineOut.dealy = valueArray[1]
 	lineOut.ipaddress = valueArray[2]
@@ -199,49 +202,33 @@ func (s *storeType) parseLineToStruct(line string) (lineOfLogType, error) {
 	return lineOut, nil
 }
 
-func (s *storeType) checkContainsLineToDB(lineOut lineOfLogType) bool {
-	// fmt.Printf("%v", lineOut)
-	row := s.db.QueryRow("select id from scsq_temptraffic where date=? AND ipaddress=? AND httpstatus=? AND sizeinbytes=? AND site=? AND method=? AND mime=? AND numproxy=?;",
-		lineOut.date, lineOut.ipaddress, lineOut.httpstatus, lineOut.sizeInBytes, lineOut.siteName, lineOut.method, lineOut.mime, config.numProxy)
-	result := ""
-	err := row.Scan(&result)
-	if err != nil {
-		return false
-	}
-	if result != "" {
-		return true
-	}
+// func (s *storeType) checkContainsLineToDB(lineOut lineOfLogType) bool {
+// 	// fmt.Printf("%v", lineOut)
+// 	row := s.db.QueryRow("select id from scsq_temptraffic where date=? AND ipaddress=? AND httpstatus=? AND sizeinbytes=? AND site=? AND method=? AND mime=? AND numproxy=?;",
+// 		lineOut.date, lineOut.ipaddress, lineOut.httpstatus, lineOut.sizeInBytes, lineOut.siteName, lineOut.method, lineOut.mime, config.numProxy)
+// 	result := ""
+// 	err := row.Scan(&result)
+// 	if err != nil {
+// 		return false
+// 	}
+// 	if result != "" {
+// 		return true
+// 	}
 
-	row2 := s.db.QueryRow(`select id from scsq_traffic where date=? AND ipaddress=? AND httpstatus=? AND sizeinbytes=? AND site=? AND method=? AND mime=?	AND numproxy=?;`,
-		lineOut.date, lineOut.ipaddress, lineOut.httpstatus, lineOut.sizeInBytes, lineOut.siteName, lineOut.method, lineOut.mime, config.numProxy)
-	result2 := ""
-	err2 := row2.Scan(&result)
-	if err2 != nil {
-		return false
-	}
-	if result2 != "" {
-		return true
-	}
+// 	row2 := s.db.QueryRow(`select id from scsq_traffic where date=? AND ipaddress=? AND httpstatus=? AND sizeinbytes=? AND site=? AND method=? AND mime=?	AND numproxy=?;`,
+// 		lineOut.date, lineOut.ipaddress, lineOut.httpstatus, lineOut.sizeInBytes, lineOut.siteName, lineOut.method, lineOut.mime, config.numProxy)
+// 	result2 := ""
+// 	err2 := row2.Scan(&result)
+// 	if err2 != nil {
+// 		return false
+// 	}
+// 	if result2 != "" {
+// 		return true
+// 	}
 
-	return false
-}
+// 	return false
+// }
 
-func (s *storeType) writeDataToDB(numOfProxy string) error {
-	data := s.lines
-	stmt, err := s.db.Prepare("INSERT INTO scsq_temptraffic (date,ipaddress,httpstatus,sizeinbytes,site,login,method,mime, numproxy) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)")
-	if err != nil {
-		return err
-	}
-	defer stmt.Close()
-	for _, v := range data {
-		_, err := stmt.Exec(v.date, v.ipaddress, v.httpstatus, v.sizeInBytes, v.siteName, v.login, v.method, v.mime, numOfProxy)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-
-}
 func (s *storeType) writeLineToDB(lineOut lineOfLogType, numOfProxy int) error {
 	stmt, err := s.db.Prepare("INSERT INTO scsq_temptraffic (date,ipaddress,httpstatus,sizeinbytes,site,login,method,mime, numproxy) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)")
 	if err != nil {
