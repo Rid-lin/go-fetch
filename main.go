@@ -65,7 +65,7 @@ func init() {
 	flag.StringVar(&config.passDB, "p", "", "Password of DB")
 	flag.StringVar(&config.hostDB, "h", "localhost", "host of DB")
 	flag.StringVar(&config.nameDB, "n", "squidreport2", "name of DB")
-	flag.IntVar(&config.numLines, "nl", 1, "Number of lines")
+	flag.IntVar(&config.numLines, "nl", 1000, "Number of lines")
 	flag.IntVar(&config.numProxy, "np", 1, "Number of proxy")
 	flag.IntVar(&config.logLevel, "debug", 0, `Level log: 
 		0 - silent, 
@@ -139,20 +139,38 @@ func main() {
 }
 
 func (s *storeType) squidLog2DBbyLine(scanner *bufio.Scanner, cfg *configType) error {
+	// flagToOptimize := 0
 	for scanner.Scan() { // Проходим по всему файлу до конца
 		line := scanner.Text() // получем текст из линии
 		if line == "" {
 			continue
 		}
 		line = replaceQuotes(line)
+
 		lineOut, err := s.parseLineToStruct(line)
 		if err != nil {
 			continue
 		}
+
+		if s.checkContainsLineToDB(lineOut) {
+			continue
+		}
+
 		err2 := s.writeLineToDB(lineOut, config.numProxy)
 		if err2 != nil {
 			continue
 		}
+
+		if (cfg.lineAdded % cfg.numLines) == 0 {
+
+			fmt.Printf("\nWrite.\n")
+			err3 := s.writeToDBTech(&config)
+			if err3 != nil {
+				return err3
+			}
+
+		}
+
 		cfg.lineAdded = cfg.lineAdded + 1
 		fmt.Printf("Line addedd: %v\r", cfg.lineAdded)
 
@@ -188,6 +206,37 @@ func (s *storeType) parseLineToStruct(line string) (lineOfLogType, error) {
 	return lineOut, nil
 }
 
+func (s *storeType) checkContainsLineToDB(lineOut lineOfLogType) bool {
+	// fmt.Printf("%v", lineOut)
+	row := s.db.QueryRow("select id from scsq_temptraffic where date=? AND ipaddress=? AND httpstatus=? AND sizeinbytes=? AND site=? AND method=? AND mime=? AND numproxy=?;",
+		lineOut.date, lineOut.ipaddress, lineOut.httpstatus, lineOut.sizeInBytes, lineOut.siteName, lineOut.method, lineOut.mime, config.numProxy)
+	result := ""
+	err := row.Scan(&result)
+	if err != nil {
+		// fmt.Printf("\nError: %v\n", err) // DEBUG
+		return false
+	}
+	if result != "" {
+		// fmt.Printf("\nResult not empty: %v\n", result) // DEBUG
+		return true
+	}
+
+	row2 := s.db.QueryRow(`select id from scsq_traffic where date=? AND ipaddress=? AND httpstatus=? AND sizeinbytes=? AND site=? AND method=? AND mime=?	AND numproxy=?;`,
+		lineOut.date, lineOut.ipaddress, lineOut.httpstatus, lineOut.sizeInBytes, lineOut.siteName, lineOut.method, lineOut.mime, config.numProxy)
+	result2 := ""
+	err2 := row2.Scan(&result)
+	if err2 != nil {
+		// fmt.Printf("\nError2 %v:\n", err) // DEBUG
+		return false
+	}
+	if result2 != "" {
+		// fmt.Printf("\nResult2 not empty %v:\n", result) // DEBUG
+		return true
+	}
+
+	return false
+}
+
 func (s *storeType) writeDataToDB(numOfProxy string) error {
 	data := s.lines
 	stmt, err := s.db.Prepare("INSERT INTO scsq_temptraffic (date,ipaddress,httpstatus,sizeinbytes,site,login,method,mime, numproxy) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)")
@@ -220,7 +269,7 @@ func (s *storeType) writeLineToDB(lineOut lineOfLogType, numOfProxy int) error {
 }
 
 func (s *storeType) readLastDay(numOfProxy int) string {
-	row := s.db.QueryRow(`select unix_timestamp(from_unixtime(max(date),'%Y-%m-%d')) from scsq_quicktraffic where numproxy="?"`, numOfProxy)
+	row := s.db.QueryRow(`select unix_timestamp(from_unixtime(max(date),'%Y-%m-%d')) from scsq_quicktraffic where numproxy=?`, numOfProxy)
 	result := ""
 	err2 := row.Scan(&result)
 	if err2 != nil {
@@ -231,7 +280,7 @@ func (s *storeType) readLastDay(numOfProxy int) string {
 }
 
 func (s *storeType) readLastDate(numOfProxy int) string {
-	row := s.db.QueryRow(`select max(date) from scsq_traffic where numproxy="?"`, numOfProxy)
+	row := s.db.QueryRow(`select max(date) from scsq_traffic where numproxy=?`, numOfProxy)
 	result := ""
 	err := row.Scan(&result)
 	if err != nil {
@@ -261,11 +310,11 @@ func (s *storeType) writeToDBTech(cfg *configType) error {
 	RIGHT JOIN (select distinct ipaddress from scsq_temptraffic) as tt ON scsq_ipaddress.name=tt.ipaddress) as tmp ON scsq_temptraffic.ipaddress=tmp.name
 	LEFT JOIN scsq_logins ON scsq_temptraffic.login=scsq_logins.name
 	LEFT JOIN scsq_httpstatus ON scsq_temptraffic.httpstatus=scsq_httpstatus.name
-	WHERE numproxy="?"`, numOfProxy); err != nil {
+	WHERE numproxy=?`, numOfProxy); err != nil {
 		fmt.Printf("Error: %v", err)
 	}
 
-	if _, err := s.db.Exec(`delete from scsq_temptraffic where numproxy="?"`, numOfProxy); err != nil {
+	if _, err := s.db.Exec(`delete from scsq_temptraffic where numproxy=?`, numOfProxy); err != nil {
 		fmt.Printf("Error: %v", err)
 	}
 
@@ -280,7 +329,7 @@ func (s *storeType) writeToDBTech(cfg *configType) error {
 	tmp2.st,
 	tmp2.httpstatus,
 	1,
-	"?"
+	?
 
 	FROM (SELECT 
 	case
@@ -295,14 +344,14 @@ func (s *storeType) writeToDBTech(cfg *configType) error {
 	ipaddress,
 	httpstatus
 	FROM scsq_traffic
-	where date>"?" and numproxy="?.
+	where date>? and numproxy=?
 
 	) as tmp2
 
 	GROUP BY CRC32(tmp2.st),FROM_UNIXTIME(date,'%Y-%m-%d-%H'),login,ipaddress,httpstatus
 	ORDER BY null;
 	`, numOfProxy, lastDay, numOfProxy); err != nil {
-		fmt.Printf("Error: %v", err)
+		fmt.Printf("Error 3: %v", err)
 	}
 
 	// update2 scsq_quicktraffic
@@ -314,7 +363,7 @@ func (s *storeType) writeToDBTech(cfg *configType) error {
 	tmp2.sums,
 	tmp2.st,
 	2,
-	".$numproxy."
+	?
 	
 	FROM (SELECT 
 	case
@@ -326,7 +375,7 @@ func (s *storeType) writeToDBTech(cfg *configType) error {
 	sum(sizeinbytes) as sums,
 	date
 	FROM scsq_traffic
-	where date>".$lastday." and numproxy=".$numproxy."
+	where date>? and numproxy=?
 	GROUP BY FROM_UNIXTIME(date,'%Y-%m-%d-%H'),crc32(st),date,site
 	
 	) as tmp2
@@ -334,14 +383,14 @@ func (s *storeType) writeToDBTech(cfg *configType) error {
 	
 	ORDER BY null;
 	`, numOfProxy, lastDay, numOfProxy); err != nil {
-		fmt.Printf("Error: %v", err)
+		fmt.Printf("Error 4: %v", err)
 	}
 
 	cfg.endTime = time.Now()
 	// #fill scsq_logtable
-	if _, err := s.db.Exec(`insert into scsq_logtable (datestart,dateend,message) VALUES ('?','?','? records counted, $countadded records added');`,
-		cfg.startTime, cfg.endTime, cfg.lineAdded); err != nil {
-		fmt.Printf("Error: %v", err)
+	if _, err := s.db.Exec(`insert into scsq_logtable (datestart,dateend,message) VALUES (?,?, ?);`,
+		cfg.startTime, cfg.endTime, fmt.Sprintf("%v records added", cfg.lineAdded)); err != nil {
+		fmt.Printf("Error 5: %v", err)
 	}
 	return nil
 }
