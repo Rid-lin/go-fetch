@@ -96,6 +96,7 @@ func init() {
 
 func main() {
 	config.startTime = time.Now()
+	fmt.Printf("\n%v - Start All Job.\n", config.startTime.Format("2006-01-02T15:04:05.000"))
 
 	// dsn := "user:password@(host_bd)/dbname"
 	// db, err := sql.Open("mysql", dsn)
@@ -110,32 +111,26 @@ func main() {
 
 	config.lastDay = store.readLastDay(config.numProxy)
 
-	file, err := os.Open(config.fileLog)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer file.Close()
+	// file, err := os.Open(config.fileLog)
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	// defer file.Close()
 
-	scanner := bufio.NewScanner(file)
+	// scanner := bufio.NewScanner(file)
 
-	err2 := store.squidLog2DBbyLine(scanner, &config)
+	// err2 := store.squidLog2DBbyLine(scanner, &config)
 
-	if err2 != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
+	// if err2 != nil {
+	// 	fmt.Println(err)
+	// 	os.Exit(1)
+	// }
 
 	err3 := store.writeToDBTech(&config)
 	if err3 != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-
-	// err3 := store.writeToDBTech(config.lastDay, config.numProxy)
-	// if err3 != nil {
-	// 	fmt.Println(err)
-	// 	os.Exit(1)
-	// }
 }
 
 func (s *storeType) squidLog2DBbyLine(scanner *bufio.Scanner, cfg *configType) error {
@@ -152,24 +147,22 @@ func (s *storeType) squidLog2DBbyLine(scanner *bufio.Scanner, cfg *configType) e
 			continue
 		}
 
-		if s.checkContainsLineToDB(lineOut) {
-			continue
-		}
-
+		// if s.checkContainsLineToDB(lineOut) {
+		// 	continue
+		// }
 		err2 := s.writeLineToDB(lineOut, config.numProxy)
 		if err2 != nil {
 			continue
 		}
+		// if (cfg.lineAdded % cfg.numLines) == 0 {
 
-		if (cfg.lineAdded % cfg.numLines) == 0 {
-
-			fmt.Printf("\nWrite.\n")
-			err3 := s.writeToDBTech(&config)
-			if err3 != nil {
-				return err3
-			}
-
-		}
+		// 	fmt.Printf("\n%v - Write start.", time.Now().Format("2006-01-02T15:04:05.000"))
+		// 	err3 := s.writeToDBTech(&config)
+		// 	if err3 != nil {
+		// 		return err3
+		// 	}
+		// 	fmt.Printf("%v - Write end.\n", time.Now().Format("2006-01-02T15:04:05.000"))
+		// }
 
 		cfg.lineAdded = cfg.lineAdded + 1
 		fmt.Printf("Line addedd: %v\r", cfg.lineAdded)
@@ -213,11 +206,9 @@ func (s *storeType) checkContainsLineToDB(lineOut lineOfLogType) bool {
 	result := ""
 	err := row.Scan(&result)
 	if err != nil {
-		// fmt.Printf("\nError: %v\n", err) // DEBUG
 		return false
 	}
 	if result != "" {
-		// fmt.Printf("\nResult not empty: %v\n", result) // DEBUG
 		return true
 	}
 
@@ -226,11 +217,9 @@ func (s *storeType) checkContainsLineToDB(lineOut lineOfLogType) bool {
 	result2 := ""
 	err2 := row2.Scan(&result)
 	if err2 != nil {
-		// fmt.Printf("\nError2 %v:\n", err) // DEBUG
 		return false
 	}
 	if result2 != "" {
-		// fmt.Printf("\nResult2 not empty %v:\n", result) // DEBUG
 		return true
 	}
 
@@ -243,7 +232,7 @@ func (s *storeType) writeDataToDB(numOfProxy string) error {
 	if err != nil {
 		return err
 	}
-	defer stmt.Close() // in reality, you should check this call for error
+	defer stmt.Close()
 	for _, v := range data {
 		_, err := stmt.Exec(v.date, v.ipaddress, v.httpstatus, v.sizeInBytes, v.siteName, v.login, v.method, v.mime, numOfProxy)
 		if err != nil {
@@ -292,35 +281,48 @@ func (s *storeType) readLastDate(numOfProxy int) string {
 
 func (s *storeType) writeToDBTech(cfg *configType) error {
 	lastDay := cfg.lastDay
-	numOfProxy := cfg.lastDay
-	if _, err := s.db.Exec("INSERT INTO scsq_httpstatus (name) (select tmp.httpstatus from (select distinct httpstatus FROM scsq_temptraffic) as tmp left outer join scsq_httpstatus on tmp.httpstatus=scsq_httpstatus.name where scsq_httpstatus.name is null);"); err != nil {
-		fmt.Printf("Error: %v", err)
-	}
+	numOfProxy := cfg.numProxy
+	t := time.Now()
+	t = printTime(" - Start of 1-st", t)
+	// if _, err := s.db.Exec("INSERT INTO scsq_httpstatus (name) (select tmp.httpstatus from (select distinct httpstatus FROM scsq_temptraffic) as tmp left outer join scsq_httpstatus on tmp.httpstatus=scsq_httpstatus.name where scsq_httpstatus.name is null);"); err != nil {
+	// 	fmt.Printf("Error: %v", err)
+	// }
+	t = printTime("Time run of 1-st:", t)
 
 	if _, err := s.db.Exec("insert into scsq_ipaddress (name) (select tmp.ipaddress from (select distinct ipaddress from scsq_temptraffic) as tmp left outer join scsq_ipaddress on tmp.ipaddress=scsq_ipaddress.name where scsq_ipaddress.name is null);"); err != nil {
 		fmt.Printf("Error: %v", err)
 	}
+	t = printTime("Time run of 2-st:", t)
 
 	if _, err := s.db.Exec("insert into scsq_logins (name) (select tmp.login from (select distinct login from scsq_temptraffic) as tmp left outer join scsq_logins on tmp.login=scsq_logins.name where scsq_logins.name is null);"); err != nil {
 		fmt.Printf("Error: %v", err)
 	}
+	t = printTime("Time run of 3-st:", t)
 
-	if _, err := s.db.Exec(`insert into scsq_traffic (date,ipaddress,login,httpstatus,sizeinbytes,site,method,mime,numproxy) select date,tmp.id,scsq_logins.id,scsq_httpstatus.id,sizeinbytes,site,method,mime,numproxy from scsq_temptraffic
+	result4, err := s.db.Exec(`insert into scsq_traffic (date,ipaddress,login,httpstatus,sizeinbytes,site,method,mime,numproxy) select date,tmp.id,scsq_logins.id,scsq_httpstatus.id,sizeinbytes,site,method,mime,numproxy from scsq_temptraffic
 	LEFT JOIN (select id,name from scsq_ipaddress
 	RIGHT JOIN (select distinct ipaddress from scsq_temptraffic) as tt ON scsq_ipaddress.name=tt.ipaddress) as tmp ON scsq_temptraffic.ipaddress=tmp.name
 	LEFT JOIN scsq_logins ON scsq_temptraffic.login=scsq_logins.name
 	LEFT JOIN scsq_httpstatus ON scsq_temptraffic.httpstatus=scsq_httpstatus.name
-	WHERE numproxy=?`, numOfProxy); err != nil {
+	WHERE numproxy=?`, numOfProxy)
+	if err != nil {
 		fmt.Printf("Error: %v", err)
 	}
+	t = printTime("Time run of 4-st:", t)
+	result4Rows, err := result4.RowsAffected()
+	fmt.Printf("\tresult-%v,error-%v,numOfProxy-%v", result4Rows, err, numOfProxy)
 
-	if _, err := s.db.Exec(`delete from scsq_temptraffic where numproxy=?`, numOfProxy); err != nil {
+	result5, err := s.db.Exec(`delete from scsq_temptraffic where numproxy=?`, numOfProxy)
+	if err != nil {
 		fmt.Printf("Error: %v", err)
 	}
+	t = printTime("Time run of 5-st:", t)
+	result5Rows, err := result5.RowsAffected()
+	fmt.Printf("\tresult-%v,error-%v,numOfProxy-%v", result5Rows, err, numOfProxy)
 
 	// Starting update scsq_quicktraffic
 
-	if _, err := s.db.Exec(`insert into scsq_quicktraffic (date,login,ipaddress,sizeinbytes,site,httpstatus,par, numproxy)
+	result6, err := s.db.Exec(`insert into scsq_quicktraffic (date,login,ipaddress,sizeinbytes,site,httpstatus,par, numproxy)
 	SELECT 
 	date,
 	tmp2.login,
@@ -350,12 +352,16 @@ func (s *storeType) writeToDBTech(cfg *configType) error {
 
 	GROUP BY CRC32(tmp2.st),FROM_UNIXTIME(date,'%Y-%m-%d-%H'),login,ipaddress,httpstatus
 	ORDER BY null;
-	`, numOfProxy, lastDay, numOfProxy); err != nil {
+	`, numOfProxy, lastDay, numOfProxy)
+	if err != nil {
 		fmt.Printf("Error 3: %v", err)
 	}
+	t = printTime(" Time run of 6-st: ", t)
+	result6Rows, err := result6.RowsAffected()
+	fmt.Printf("\tresult-%v,error-%v", result6Rows, err)
 
 	// update2 scsq_quicktraffic
-	if _, err := s.db.Exec(`insert into scsq_quicktraffic (date,login,ipaddress,sizeinbytes,site,par, numproxy)
+	result7, err := s.db.Exec(`insert into scsq_quicktraffic (date,login,ipaddress,sizeinbytes,site,par, numproxy)
 	SELECT 
 	tmp2.date,
 	'0',
@@ -382,15 +388,32 @@ func (s *storeType) writeToDBTech(cfg *configType) error {
 	
 	
 	ORDER BY null;
-	`, numOfProxy, lastDay, numOfProxy); err != nil {
+	`, numOfProxy, lastDay, numOfProxy)
+
+	if err != nil {
 		fmt.Printf("Error 4: %v", err)
 	}
+	t = printTime("Time run of 7-st:", t)
+	result7Rows, err := result7.RowsAffected()
+	fmt.Printf("\tresult-%v,error-%v", result7Rows, err)
 
 	cfg.endTime = time.Now()
 	// #fill scsq_logtable
-	if _, err := s.db.Exec(`insert into scsq_logtable (datestart,dateend,message) VALUES (?,?, ?);`,
-		cfg.startTime, cfg.endTime, fmt.Sprintf("%v records added", cfg.lineAdded)); err != nil {
+	result8, err := s.db.Exec(`insert into scsq_logtable (datestart,dateend,message) VALUES (?,?, ?);`,
+		cfg.startTime, cfg.endTime, fmt.Sprintf("%v records added", cfg.lineAdded))
+	if err != nil {
 		fmt.Printf("Error 5: %v", err)
 	}
+	t = printTime("Time run of 8-st: ", t)
+	result8Rows, err := result8.RowsAffected()
+	fmt.Printf("\tresult-%v,error-%v", result8Rows, err)
+
+	fmt.Printf("\n%v Time run of All Job: %v\n", cfg.endTime.Format("2006-01-02T15:04:05.000"), time.Since(cfg.startTime))
+
 	return nil
+}
+
+func printTime(text string, t time.Time) time.Time {
+	fmt.Printf("\n%v %v %v", time.Now().Format("2006-01-02T15:04:05.000"), text, time.Since(t))
+	return time.Now()
 }
