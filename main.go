@@ -111,20 +111,20 @@ func main() {
 
 	config.lastDay = store.readLastDay(config.numProxy)
 
-	// file, err := os.Open(config.fileLog)
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	// defer file.Close()
+	file, err := os.Open(config.fileLog)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer file.Close()
 
-	// scanner := bufio.NewScanner(file)
+	scanner := bufio.NewScanner(file)
 
-	// err2 := store.squidLog2DBbyLine(scanner, &config)
+	err2 := store.squidLog2DBbyLine(scanner, &config)
 
-	// if err2 != nil {
-	// 	fmt.Println(err)
-	// 	os.Exit(1)
-	// }
+	if err2 != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 
 	err3 := store.writeToDBTech(&config)
 	if err3 != nil {
@@ -284,9 +284,9 @@ func (s *storeType) writeToDBTech(cfg *configType) error {
 	numOfProxy := cfg.numProxy
 	t := time.Now()
 	t = printTime(" - Start of 1-st", t)
-	// if _, err := s.db.Exec("INSERT INTO scsq_httpstatus (name) (select tmp.httpstatus from (select distinct httpstatus FROM scsq_temptraffic) as tmp left outer join scsq_httpstatus on tmp.httpstatus=scsq_httpstatus.name where scsq_httpstatus.name is null);"); err != nil {
-	// 	fmt.Printf("Error: %v", err)
-	// }
+	if _, err := s.db.Exec("INSERT INTO scsq_httpstatus (name) (select tmp.httpstatus from (select distinct httpstatus FROM scsq_temptraffic) as tmp left outer join scsq_httpstatus on tmp.httpstatus=scsq_httpstatus.name where scsq_httpstatus.name is null);"); err != nil {
+		fmt.Printf("Error: %v", err)
+	}
 	t = printTime("Time run of 1-st:", t)
 
 	if _, err := s.db.Exec("insert into scsq_ipaddress (name) (select tmp.ipaddress from (select distinct ipaddress from scsq_temptraffic) as tmp left outer join scsq_ipaddress on tmp.ipaddress=scsq_ipaddress.name where scsq_ipaddress.name is null);"); err != nil {
