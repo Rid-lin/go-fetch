@@ -125,8 +125,10 @@ func main() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
+	numStart := 0
+	numEnd := config.numLines
 
-	err3 := store.writeToDBTech(&config)
+	err3 := store.writeToDBTech(&config, numStart, numEnd)
 	if err3 != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -266,50 +268,45 @@ func (s *storeType) readLastDate(numOfProxy int) string {
 	return result
 }
 
-func (s *storeType) writeToDBTech(cfg *configType) error {
+func (s *storeType) writeToDBTech(cfg *configType, numStart, numEnd int) error {
 	lastDay := cfg.lastDay
 	numOfProxy := cfg.numProxy
-	t := time.Now()
-	t = printTime(" - Start of 1-st", t)
+	// t := time.Now()
+
+	t := printTime("Start filling httpstatus, ", cfg.startTime)
 	if _, err := s.db.Exec("INSERT INTO scsq_httpstatus (name) (select tmp.httpstatus from (select distinct httpstatus FROM scsq_temptraffic) as tmp left outer join scsq_httpstatus on tmp.httpstatus=scsq_httpstatus.name where scsq_httpstatus.name is null);"); err != nil {
 		fmt.Printf("Error: %v", err)
 	}
-	t = printTime("Time run of 1-st:", t)
 
+	t = printTime("Start filling scsq_ipaddress, ", t)
 	if _, err := s.db.Exec("insert into scsq_ipaddress (name) (select tmp.ipaddress from (select distinct ipaddress from scsq_temptraffic) as tmp left outer join scsq_ipaddress on tmp.ipaddress=scsq_ipaddress.name where scsq_ipaddress.name is null);"); err != nil {
 		fmt.Printf("Error: %v", err)
 	}
-	t = printTime("Time run of 2-st:", t)
 
+	t = printTime("Start filling scsq_logins, ", t)
 	if _, err := s.db.Exec("insert into scsq_logins (name) (select tmp.login from (select distinct login from scsq_temptraffic) as tmp left outer join scsq_logins on tmp.login=scsq_logins.name where scsq_logins.name is null);"); err != nil {
 		fmt.Printf("Error: %v", err)
 	}
-	t = printTime("Time run of 3-st:", t)
 
-	result4, err := s.db.Exec(`insert into scsq_traffic (date,ipaddress,login,httpstatus,sizeinbytes,site,method,mime,numproxy) select date,tmp.id,scsq_logins.id,scsq_httpstatus.id,sizeinbytes,site,method,mime,numproxy from scsq_temptraffic
+	t = printTime("Start filling scsq_traffic, ", t)
+	if _, err := s.db.Exec(`insert into scsq_traffic (date,ipaddress,login,httpstatus,sizeinbytes,site,method,mime,numproxy) select date,tmp.id,scsq_logins.id,scsq_httpstatus.id,sizeinbytes,site,method,mime,numproxy from scsq_temptraffic
 	LEFT JOIN (select id,name from scsq_ipaddress
 	RIGHT JOIN (select distinct ipaddress from scsq_temptraffic) as tt ON scsq_ipaddress.name=tt.ipaddress) as tmp ON scsq_temptraffic.ipaddress=tmp.name
 	LEFT JOIN scsq_logins ON scsq_temptraffic.login=scsq_logins.name
 	LEFT JOIN scsq_httpstatus ON scsq_temptraffic.httpstatus=scsq_httpstatus.name
-	WHERE numproxy=?`, numOfProxy)
-	if err != nil {
+	WHERE numproxy=?`, numOfProxy); err != nil {
 		fmt.Printf("Error: %v", err)
 	}
-	t = printTime("Time run of 4-st:", t)
-	result4Rows, err := result4.RowsAffected()
-	fmt.Printf("\tresult-%v,error-%v,numOfProxy-%v", result4Rows, err, numOfProxy)
 
-	result5, err := s.db.Exec(`delete from scsq_temptraffic where numproxy=?`, numOfProxy)
-	if err != nil {
+	t = printTime("Start delete from scsq_temptraffic, ", t)
+	if _, err := s.db.Exec(`delete from scsq_temptraffic where numproxy=?`, numOfProxy); err != nil {
 		fmt.Printf("Error: %v", err)
 	}
-	t = printTime("Time run of 5-st:", t)
-	result5Rows, err := result5.RowsAffected()
-	fmt.Printf("\tresult-%v,error-%v,numOfProxy-%v", result5Rows, err, numOfProxy)
 
 	// Starting update scsq_quicktraffic
+	t = printTime("Start filling scsq_quicktraffic, ", t)
 
-	result6, err := s.db.Exec(`insert into scsq_quicktraffic (date,login,ipaddress,sizeinbytes,site,httpstatus,par, numproxy)
+	if _, err := s.db.Exec(`insert into scsq_quicktraffic (date,login,ipaddress,sizeinbytes,site,httpstatus,par, numproxy)
 	SELECT 
 	date,
 	tmp2.login,
@@ -339,16 +336,13 @@ func (s *storeType) writeToDBTech(cfg *configType) error {
 
 	GROUP BY CRC32(tmp2.st),FROM_UNIXTIME(date,'%Y-%m-%d-%H'),login,ipaddress,httpstatus
 	ORDER BY null;
-	`, numOfProxy, lastDay, numOfProxy)
-	if err != nil {
+	`, numOfProxy, lastDay, numOfProxy); err != nil {
 		fmt.Printf("Error 3: %v", err)
 	}
-	t = printTime(" Time run of 6-st: ", t)
-	result6Rows, err := result6.RowsAffected()
-	fmt.Printf("\tresult-%v,error-%v", result6Rows, err)
 
 	// update2 scsq_quicktraffic
-	result7, err := s.db.Exec(`insert into scsq_quicktraffic (date,login,ipaddress,sizeinbytes,site,par, numproxy)
+	t = printTime("Start update scsq_quicktraffic, ", t)
+	if _, err := s.db.Exec(`insert into scsq_quicktraffic (date,login,ipaddress,sizeinbytes,site,par, numproxy)
 	SELECT 
 	tmp2.date,
 	'0',
@@ -375,32 +369,25 @@ func (s *storeType) writeToDBTech(cfg *configType) error {
 	
 	
 	ORDER BY null;
-	`, numOfProxy, lastDay, numOfProxy)
-
-	if err != nil {
+	`, numOfProxy, lastDay, numOfProxy); err != nil {
 		fmt.Printf("Error 4: %v", err)
 	}
-	t = printTime("Time run of 7-st:", t)
-	result7Rows, err := result7.RowsAffected()
-	fmt.Printf("\tresult-%v,error-%v", result7Rows, err)
 
+	t = printTime("Start filling scsq_logtable, ", t)
 	cfg.endTime = time.Now()
 	// #fill scsq_logtable
-	result8, err := s.db.Exec(`insert into scsq_logtable (datestart,dateend,message) VALUES (?,?, ?);`,
-		cfg.startTime, cfg.endTime, fmt.Sprintf("%v records added", cfg.lineAdded))
-	if err != nil {
+	if _, err := s.db.Exec(`insert into scsq_logtable (datestart,dateend,message) VALUES (?,?, ?);`,
+		cfg.startTime, cfg.endTime, fmt.Sprintf("%v records added", numEnd-numStart)); err != nil {
 		fmt.Printf("Error 5: %v", err)
 	}
-	t = printTime("Time run of 8-st: ", t)
-	result8Rows, err := result8.RowsAffected()
-	fmt.Printf("\tresult-%v,error-%v", result8Rows, err)
 
-	fmt.Printf("\n%v Time run of All Job: %v\n", cfg.endTime.Format("2006-01-02T15:04:05.000"), time.Since(cfg.startTime))
+	_ = printTime("", t)
+	fmt.Printf(" The execution time of All Job: %v\n", time.Since(cfg.startTime))
 
 	return nil
 }
 
 func printTime(text string, t time.Time) time.Time {
-	fmt.Printf("\n%v %v %v", time.Now().Format("2006-01-02T15:04:05.000"), text, time.Since(t))
+	fmt.Printf("execution time:%v\n%v %v", time.Since(t), time.Now().Format("2006-01-02T15:04:05.000"), text)
 	return time.Now()
 }
