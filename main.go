@@ -71,7 +71,7 @@ func init() {
 		0 - silent, 
 		1 - error, start and end, 
 		2 - error, start and end, warning, 
-		3 - error, start and end, warning, access granted and denided,
+		3 - error, start and end, warning, info,
 		4 - error, start and end, warning, access granted and denided, request from squid `)
 	// flag.IntVar(&config.ttl, "ttl", 300, "Defines the time after which data from the database will be updated in seconds")
 	flag.Parse()
@@ -110,6 +110,12 @@ func main() {
 	config.lastDate = store.readLastDate(config.numProxy)
 
 	config.lastDay = store.readLastDay(config.numProxy)
+
+	err0 := store.prepareDB(config.lastDay, config.numProxy)
+	if err0 != nil {
+		chkM("Error delete old data", err)
+	}
+
 	// fmt.Printf("config.lastDate:%v, config.lastDay:%v\n", config.lastDate, config.lastDay)
 
 	file, err := os.Open(config.fileLog)
@@ -130,8 +136,28 @@ func main() {
 	chk(err3)
 }
 
+// #clear last date in table with data.
+func (s *storeType) prepareDB(lastDay string, numProxy int) error {
+	_, err := s.db.Exec("delete from scsq_quicktraffic where date>? and numproxy=?", lastDay, numProxy)
+	if err != nil {
+		return err
+	}
+
+	// #clear temptable to be sure, that table have no strange data before import.
+	_, err2 := s.db.Exec("delete from scsq_temptraffic where numproxy=?", numProxy)
+	if err2 != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (s *storeType) squidLog2DBbyLine(scanner *bufio.Scanner, cfg *configType) error {
+	fmt.Printf("\n")
 	for scanner.Scan() { // Проходим по всему файлу до конца
+		cfg.lineAdded = cfg.lineAdded + 1
+		fmt.Printf("\rAttempt to add a line: %v - ", cfg.lineAdded)
+
 		line := scanner.Text() // получем текст из линии
 		if line == "" {
 			continue
@@ -140,26 +166,28 @@ func (s *storeType) squidLog2DBbyLine(scanner *bufio.Scanner, cfg *configType) e
 
 		lineOut, err := s.parseLineToStruct(line)
 		if err != nil {
-			fmt.Printf("%v", err)
+			toLog(cfg.logLevel, 2, fmt.Sprintf("%v\n", err))
+			// fmt.Printf("%v\n", err)
 			continue
 		}
 
 		if cfg.lastDate >= lineOut.date {
-			fmt.Printf("line too old\n")
+			toLog(cfg.logLevel, 3, "line too old\r")
+			// fmt.Printf("line too old\r")
 			continue
 		}
 
 		err2 := s.writeLineToDB(lineOut, config.numProxy)
 		if err2 != nil {
-
+			toLog(cfg.logLevel, 2, fmt.Sprintf("Write error(%v)\n", err2))
+			// fmt.Printf("Write error(%v)\n", err2)
 			continue
 		}
 
-		cfg.lineAdded = cfg.lineAdded + 1
-		fmt.Printf("Line addedd: %v\r", cfg.lineAdded)
+		fmt.Printf("OK")
 
 	}
-	fmt.Printf("\n")
+	// fmt.Printf("\n")
 	if err := scanner.Err(); err != nil {
 		return err
 	}
@@ -204,7 +232,6 @@ func (s *storeType) writeLineToDB(lineOut lineOfLogType, numOfProxy int) error {
 		return err
 	}
 	return nil
-
 }
 
 func (s *storeType) readLastDay(numOfProxy int) string {
@@ -296,7 +323,7 @@ func (s *storeType) writeToDBTech(cfg *configType, numStart, numEnd int) error {
 	) as tmp2
 
 	GROUP BY CRC32(tmp2.st),FROM_UNIXTIME(date,'%Y-%m-%d-%H'),login,ipaddress,httpstatus
-	ORDER BY null;
+	ORDER BY NULL;
 	`, numOfProxy, lastDay, numOfProxy); err != nil {
 		fmt.Printf("Error 3: %v", err)
 	}
@@ -325,11 +352,11 @@ func (s *storeType) writeToDBTech(cfg *configType, numStart, numEnd int) error {
 	FROM scsq_traffic
 	where date>? and numproxy=?
 	GROUP BY FROM_UNIXTIME(date,'%Y-%m-%d-%H'),crc32(st),date,site
-	
+
 	) as tmp2
 	
 	
-	ORDER BY null;
+	ORDER BY NULL;
 	`, numOfProxy, lastDay, numOfProxy); err != nil {
 		fmt.Printf("Error 4: %v", err)
 	}
@@ -349,6 +376,6 @@ func (s *storeType) writeToDBTech(cfg *configType, numStart, numEnd int) error {
 }
 
 func printTime(text string, t time.Time) time.Time {
-	fmt.Printf("execution time:%v\n%v %v", time.Since(t), time.Now().Format("2006-01-02T15:04:05.000"), text)
+	fmt.Printf("\texecution time:%v\n%v %v", time.Since(t), time.Now().Format("2006-01-02T15:04:05.000"), text)
 	return time.Now()
 }
