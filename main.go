@@ -351,6 +351,7 @@ func (s *storeType) writeToDBTech(cfg *configType, numStart, numEnd int) error {
 	date
 	FROM scsq_traffic
 	where date>? and numproxy=?
+	
 	GROUP BY FROM_UNIXTIME(date,'%Y-%m-%d-%H'),crc32(st),date,site
 
 	) as tmp2
