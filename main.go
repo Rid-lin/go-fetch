@@ -111,32 +111,20 @@ func main() {
 
 	config.lastDay = store.readLastDay(config.numProxy)
 
-	file, err := os.Open(config.fileLog)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
+	scanner, err := openInputFile(config.fileLog)
+	chkM("Error opening squid log file", err)
 
 	err2 := store.squidLog2DBbyLine(scanner, &config)
+	chk(err2)
 
-	if err2 != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
 	numStart := 0
 	numEnd := config.numLines
 
 	err3 := store.writeToDBTech(&config, numStart, numEnd)
-	if err3 != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
+	chk(err3)
 }
 
 func (s *storeType) squidLog2DBbyLine(scanner *bufio.Scanner, cfg *configType) error {
-	// flagToOptimize := 0
 	for scanner.Scan() { // Проходим по всему файлу до конца
 		line := scanner.Text() // получем текст из линии
 		if line == "" {
@@ -149,22 +137,14 @@ func (s *storeType) squidLog2DBbyLine(scanner *bufio.Scanner, cfg *configType) e
 			continue
 		}
 
-		// if s.checkContainsLineToDB(lineOut) {
-		// 	continue
-		// }
+		if lineOut.date >= cfg.lastDate {
+			continue
+		}
+
 		err2 := s.writeLineToDB(lineOut, config.numProxy)
 		if err2 != nil {
 			continue
 		}
-		// if (cfg.lineAdded % cfg.numLines) == 0 {
-
-		// 	fmt.Printf("\n%v - Write start.", time.Now().Format("2006-01-02T15:04:05.000"))
-		// 	err3 := s.writeToDBTech(&config)
-		// 	if err3 != nil {
-		// 		return err3
-		// 	}
-		// 	fmt.Printf("%v - Write end.\n", time.Now().Format("2006-01-02T15:04:05.000"))
-		// }
 
 		cfg.lineAdded = cfg.lineAdded + 1
 		fmt.Printf("Line addedd: %v\r", cfg.lineAdded)
@@ -193,7 +173,6 @@ func (s *storeType) parseLineToStruct(line string) (lineOfLogType, error) {
 		return lineOut, fmt.Errorf("This is line already in DB")
 	}
 	lineOut.date = valueArray[0]
-	// lineOut.dealy = valueArray[1]
 	lineOut.ipaddress = valueArray[2]
 	lineOut.httpstatus = valueArray[3]
 	lineOut.sizeInBytes = valueArray[4]
@@ -203,33 +182,6 @@ func (s *storeType) parseLineToStruct(line string) (lineOfLogType, error) {
 	lineOut.mime = valueArray[9]
 	return lineOut, nil
 }
-
-// func (s *storeType) checkContainsLineToDB(lineOut lineOfLogType) bool {
-// 	// fmt.Printf("%v", lineOut)
-// 	row := s.db.QueryRow("select id from scsq_temptraffic where date=? AND ipaddress=? AND httpstatus=? AND sizeinbytes=? AND site=? AND method=? AND mime=? AND numproxy=?;",
-// 		lineOut.date, lineOut.ipaddress, lineOut.httpstatus, lineOut.sizeInBytes, lineOut.siteName, lineOut.method, lineOut.mime, config.numProxy)
-// 	result := ""
-// 	err := row.Scan(&result)
-// 	if err != nil {
-// 		return false
-// 	}
-// 	if result != "" {
-// 		return true
-// 	}
-
-// 	row2 := s.db.QueryRow(`select id from scsq_traffic where date=? AND ipaddress=? AND httpstatus=? AND sizeinbytes=? AND site=? AND method=? AND mime=?	AND numproxy=?;`,
-// 		lineOut.date, lineOut.ipaddress, lineOut.httpstatus, lineOut.sizeInBytes, lineOut.siteName, lineOut.method, lineOut.mime, config.numProxy)
-// 	result2 := ""
-// 	err2 := row2.Scan(&result)
-// 	if err2 != nil {
-// 		return false
-// 	}
-// 	if result2 != "" {
-// 		return true
-// 	}
-
-// 	return false
-// }
 
 func (s *storeType) writeLineToDB(lineOut lineOfLogType, numOfProxy int) error {
 	stmt, err := s.db.Prepare("INSERT INTO scsq_temptraffic (date,ipaddress,httpstatus,sizeinbytes,site,login,method,mime, numproxy) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)")
@@ -266,6 +218,17 @@ func (s *storeType) readLastDate(numOfProxy int) string {
 	}
 
 	return result
+}
+
+func openInputFile(fileLog string) (*bufio.Scanner, error) {
+	file, err := os.Open(config.fileLog)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	return bufio.NewScanner(file), nil
+
 }
 
 func (s *storeType) writeToDBTech(cfg *configType, numStart, numEnd int) error {
@@ -341,7 +304,7 @@ func (s *storeType) writeToDBTech(cfg *configType, numStart, numEnd int) error {
 	}
 
 	// update2 scsq_quicktraffic
-	t = printTime("Start update scsq_quicktraffic, ", t)
+	t = printTime("Start update2 scsq_quicktraffic, ", t)
 	if _, err := s.db.Exec(`insert into scsq_quicktraffic (date,login,ipaddress,sizeinbytes,site,par, numproxy)
 	SELECT 
 	tmp2.date,

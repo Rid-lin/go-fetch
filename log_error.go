@@ -5,20 +5,17 @@ import (
 	"os"
 )
 
-func fatal(v interface{}) {
-	log.Fatalln(v)
-	os.Exit(1)
-}
-
 func chk(err error) {
 	if err != nil {
-		fatal(err)
+		log.Fatalln(err)
+		os.Exit(1)
 	}
 }
 
 func chkM(message string, err error) {
 	if err != nil {
 		log.Fatalf("%v %v", message, err)
+		os.Exit(1)
 	}
 }
 
