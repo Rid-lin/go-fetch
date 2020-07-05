@@ -111,8 +111,12 @@ func main() {
 
 	config.lastDay = store.readLastDay(config.numProxy)
 
-	scanner, err := openInputFile(config.fileLog)
-	chkM("Error opening squid log file", err)
+	file, err := os.Open(config.fileLog)
+	if err != nil {
+		chkM("Error opening squid log file", err)
+	}
+	defer file.Close()
+	scanner := bufio.NewScanner(file)
 
 	err2 := store.squidLog2DBbyLine(scanner, &config)
 	chk(err2)
@@ -137,7 +141,7 @@ func (s *storeType) squidLog2DBbyLine(scanner *bufio.Scanner, cfg *configType) e
 			continue
 		}
 
-		if lineOut.date >= cfg.lastDate {
+		if cfg.lastDate >= lineOut.date {
 			continue
 		}
 
@@ -218,17 +222,6 @@ func (s *storeType) readLastDate(numOfProxy int) string {
 	}
 
 	return result
-}
-
-func openInputFile(fileLog string) (*bufio.Scanner, error) {
-	file, err := os.Open(config.fileLog)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	return bufio.NewScanner(file), nil
-
 }
 
 func (s *storeType) writeToDBTech(cfg *configType, numStart, numEnd int) error {
