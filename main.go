@@ -110,12 +110,14 @@ func main() {
 	config.lastDate = store.readLastDate(config.numProxy)
 
 	config.lastDay = store.readLastDay(config.numProxy)
+	// fmt.Printf("config.lastDate:%v, config.lastDay:%v\n", config.lastDate, config.lastDay)
 
 	file, err := os.Open(config.fileLog)
 	if err != nil {
 		chkM("Error opening squid log file", err)
 	}
 	defer file.Close()
+
 	scanner := bufio.NewScanner(file)
 
 	err2 := store.squidLog2DBbyLine(scanner, &config)
@@ -138,15 +140,18 @@ func (s *storeType) squidLog2DBbyLine(scanner *bufio.Scanner, cfg *configType) e
 
 		lineOut, err := s.parseLineToStruct(line)
 		if err != nil {
+			fmt.Printf("%v", err)
 			continue
 		}
 
 		if cfg.lastDate >= lineOut.date {
+			fmt.Printf("line too old\n")
 			continue
 		}
 
 		err2 := s.writeLineToDB(lineOut, config.numProxy)
 		if err2 != nil {
+
 			continue
 		}
 
@@ -154,7 +159,7 @@ func (s *storeType) squidLog2DBbyLine(scanner *bufio.Scanner, cfg *configType) e
 		fmt.Printf("Line addedd: %v\r", cfg.lineAdded)
 
 	}
-
+	fmt.Printf("\n")
 	if err := scanner.Err(); err != nil {
 		return err
 	}
@@ -173,9 +178,9 @@ func (s *storeType) parseLineToStruct(line string) (lineOfLogType, error) {
 	if len(valueArray) == 0 {          // проверяем длину строки, чтобы убедиться что строка нормально распарсилась\её формат
 		return lineOut, fmt.Errorf("Error, string is empty") // если это не так то следующая линия
 	}
-	if config.lastDate <= valueArray[0] {
-		return lineOut, fmt.Errorf("This is line already in DB")
-	}
+	// if config.lastDate <= valueArray[0] {
+	// 	return lineOut, fmt.Errorf("This is line already in DB")
+	// }
 	lineOut.date = valueArray[0]
 	lineOut.ipaddress = valueArray[2]
 	lineOut.httpstatus = valueArray[3]
