@@ -30,6 +30,7 @@ type configType struct {
 	startTime time.Time
 	endTime   time.Time
 	lineAdded int
+	lineRead  int
 }
 
 type storeType struct {
@@ -155,8 +156,9 @@ func (s *storeType) prepareDB(lastDay string, numProxy int) error {
 func (s *storeType) squidLog2DBbyLine(scanner *bufio.Scanner, cfg *configType) error {
 	fmt.Printf("\n")
 	for scanner.Scan() { // Проходим по всему файлу до конца
-		cfg.lineAdded = cfg.lineAdded + 1
-		fmt.Printf("\rAttempt to add a line: %v - ", cfg.lineAdded)
+		cfg.lineRead = cfg.lineRead + 1
+		// cfg.lineAdded = cfg.lineAdded + 1
+		// fmt.Printf("\rAttempt to add a line: %v - ", cfg.lineAdded)
 
 		line := scanner.Text() // получем текст из линии
 		if line == "" {
@@ -183,8 +185,9 @@ func (s *storeType) squidLog2DBbyLine(scanner *bufio.Scanner, cfg *configType) e
 			// fmt.Printf("Write error(%v)\n", err2)
 			continue
 		}
+		cfg.lineAdded = cfg.lineAdded + 1
 
-		fmt.Printf("OK")
+		fmt.Printf("Lines read: %v, lines added: %v.", cfg.lineRead, cfg.lineAdded)
 
 	}
 	// fmt.Printf("\n")
@@ -259,6 +262,8 @@ func (s *storeType) readLastDate(numOfProxy int) string {
 func (s *storeType) writeToDBTech(cfg *configType, numStart, numEnd int) error {
 	lastDay := cfg.lastDay
 	numOfProxy := cfg.numProxy
+	lineRead := cfg.lineRead
+	lineAdded := cfg.lineAdded
 	// t := time.Now()
 
 	t := printTime("Start filling httpstatus, ", cfg.startTime)
@@ -366,7 +371,7 @@ func (s *storeType) writeToDBTech(cfg *configType, numStart, numEnd int) error {
 	cfg.endTime = time.Now()
 	// #fill scsq_logtable
 	if _, err := s.db.Exec(`insert into scsq_logtable (datestart,dateend,message) VALUES (?,?, ?);`,
-		cfg.startTime, cfg.endTime, fmt.Sprintf("%v records added", numEnd-numStart)); err != nil {
+		cfg.startTime, cfg.endTime, fmt.Sprintf("%v records read, %v records added", lineRead, lineAdded)); err != nil {
 		fmt.Printf("Error 5: %v", err)
 	}
 
