@@ -73,7 +73,7 @@ func init() {
 		1 - error, start and end, 
 		2 - error, start and end, warning, 
 		3 - error, start and end, warning, info,
-		4 - error, start and end, warning, access granted and denided, request from squid `)
+		4 - error, start and end, warning, info and more info`)
 	// flag.IntVar(&config.ttl, "ttl", 300, "Defines the time after which data from the database will be updated in seconds")
 	flag.Parse()
 	if (config.typedb != "mysql") || (config.typedb != "postgres") {
@@ -88,16 +88,16 @@ func init() {
 	if config.logLevel != 0 {
 		log.SetFlags(log.Ldate | log.Ltime)
 		toLog(config.logLevel, 1, "go-fetch | Init started")
-		fl, err := os.OpenFile(config.fileLog, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
-		chkM(fmt.Sprintf("Error opening to write log file (%v): ", config.fileLog), err)
-		defer fl.Close()
-		log.SetOutput(fl)
+		// fl, err := os.OpenFile(config.fileLog, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+		// chkM(fmt.Sprintf("Error opening to write log file (%v): ", config.fileLog), err)
+		// defer fl.Close()
+		// log.SetOutput(fl)
 	} // If logLevel not specified - silent mode
 }
 
 func main() {
 	config.startTime = time.Now()
-	fmt.Printf("\n%v - Start All Job.\n", config.startTime.Format("2006-01-02T15:04:05.000"))
+	fmt.Printf("\n%v - Start All Job.\n", config.startTime.Format("2006-01-02 15:04:05.000"))
 
 	// dsn := "user:password@(host_bd)/dbname"
 	// db, err := sql.Open("mysql", dsn)
@@ -111,6 +111,7 @@ func main() {
 	config.lastDate = store.readLastDate(config.numProxy)
 
 	config.lastDay = store.readLastDay(config.numProxy)
+	toLog(config.logLevel, 4, fmt.Sprintf("config.lastDate: %v, config.lastDay: %v", config.lastDate, config.lastDay))
 
 	err0 := store.prepareDB(config.lastDay, config.numProxy)
 	if err0 != nil {
@@ -131,9 +132,8 @@ func main() {
 	chk(err2)
 
 	numStart := 0
-	numEnd := config.numLines
 
-	err3 := store.writeToDBTech(&config, numStart, numEnd)
+	err3 := store.writeToDBTech(&config, numStart, config.lineAdded)
 	chk(err3)
 }
 
@@ -174,7 +174,7 @@ func (s *storeType) squidLog2DBbyLine(scanner *bufio.Scanner, cfg *configType) e
 		}
 
 		if cfg.lastDate >= lineOut.date {
-			toLog(cfg.logLevel, 3, "line too old\r")
+			toLog(cfg.logLevel, 4, "line too old\r")
 			// fmt.Printf("line too old\r")
 			continue
 		}
@@ -192,6 +192,7 @@ func (s *storeType) squidLog2DBbyLine(scanner *bufio.Scanner, cfg *configType) e
 	}
 	// fmt.Printf("\n")
 	if err := scanner.Err(); err != nil {
+		toLog(cfg.logLevel, 2, fmt.Sprintf("%v\n", err))
 		return err
 	}
 	return nil
@@ -264,21 +265,21 @@ func (s *storeType) writeToDBTech(cfg *configType, numStart, numEnd int) error {
 	numOfProxy := cfg.numProxy
 	lineRead := cfg.lineRead
 	lineAdded := cfg.lineAdded
-	// t := time.Now()
+	logLevel := cfg.logLevel
 
 	t := printTime("Start filling httpstatus, ", cfg.startTime)
 	if _, err := s.db.Exec("INSERT INTO scsq_httpstatus (name) (select tmp.httpstatus from (select distinct httpstatus FROM scsq_temptraffic) as tmp left outer join scsq_httpstatus on tmp.httpstatus=scsq_httpstatus.name where scsq_httpstatus.name is null);"); err != nil {
-		fmt.Printf("Error: %v", err)
+		toLog(logLevel, 3, fmt.Sprintf("Error filling httpstatus: %v", err))
 	}
 
 	t = printTime("Start filling scsq_ipaddress, ", t)
 	if _, err := s.db.Exec("insert into scsq_ipaddress (name) (select tmp.ipaddress from (select distinct ipaddress from scsq_temptraffic) as tmp left outer join scsq_ipaddress on tmp.ipaddress=scsq_ipaddress.name where scsq_ipaddress.name is null);"); err != nil {
-		fmt.Printf("Error: %v", err)
+		toLog(logLevel, 3, fmt.Sprintf("Error filling scsq_ipaddress: %v", err))
 	}
 
 	t = printTime("Start filling scsq_logins, ", t)
 	if _, err := s.db.Exec("insert into scsq_logins (name) (select tmp.login from (select distinct login from scsq_temptraffic) as tmp left outer join scsq_logins on tmp.login=scsq_logins.name where scsq_logins.name is null);"); err != nil {
-		fmt.Printf("Error: %v", err)
+		toLog(logLevel, 3, fmt.Sprintf("Error filling scsq_logins: %v", err))
 	}
 
 	t = printTime("Start filling scsq_traffic, ", t)
@@ -288,12 +289,12 @@ func (s *storeType) writeToDBTech(cfg *configType, numStart, numEnd int) error {
 	LEFT JOIN scsq_logins ON scsq_temptraffic.login=scsq_logins.name
 	LEFT JOIN scsq_httpstatus ON scsq_temptraffic.httpstatus=scsq_httpstatus.name
 	WHERE numproxy=?`, numOfProxy); err != nil {
-		fmt.Printf("Error: %v", err)
+		toLog(logLevel, 3, fmt.Sprintf("Error filling scsq_traffic: %v", err))
 	}
 
 	t = printTime("Start delete from scsq_temptraffic, ", t)
 	if _, err := s.db.Exec(`delete from scsq_temptraffic where numproxy=?`, numOfProxy); err != nil {
-		fmt.Printf("Error: %v", err)
+		toLog(logLevel, 3, fmt.Sprintf("Error deleting from scsq_temptraffic: %v", err))
 	}
 
 	// Starting update scsq_quicktraffic
@@ -330,7 +331,7 @@ func (s *storeType) writeToDBTech(cfg *configType, numStart, numEnd int) error {
 	GROUP BY CRC32(tmp2.st),FROM_UNIXTIME(date,'%Y-%m-%d-%H'),login,ipaddress,httpstatus
 	ORDER BY NULL;
 	`, numOfProxy, lastDay, numOfProxy); err != nil {
-		fmt.Printf("Error 3: %v", err)
+		toLog(logLevel, 3, fmt.Sprintf("Error filling scsq_quicktraffic: %v", err))
 	}
 
 	// update2 scsq_quicktraffic
@@ -364,15 +365,15 @@ func (s *storeType) writeToDBTech(cfg *configType, numStart, numEnd int) error {
 	
 	ORDER BY NULL;
 	`, numOfProxy, lastDay, numOfProxy); err != nil {
-		fmt.Printf("Error 4: %v", err)
+		toLog(logLevel, 3, fmt.Sprintf("Error updating scsq_quicktraffic: %v", err))
 	}
 
 	t = printTime("Start filling scsq_logtable, ", t)
 	cfg.endTime = time.Now()
 	// #fill scsq_logtable
-	if _, err := s.db.Exec(`insert into scsq_logtable (datestart,dateend,message) VALUES (?,?, ?);`,
-		cfg.startTime, cfg.endTime, fmt.Sprintf("%v records read, %v records added", lineRead, lineAdded)); err != nil {
-		fmt.Printf("Error 5: %v", err)
+	if _, err := s.db.Exec(`insert into scsq_logtable (datestart,dateend,message) VALUES (?, ?, ?);`,
+		cfg.startTime.Unix(), cfg.endTime.Unix(), fmt.Sprintf("%v entries read, of which new %v added", lineRead, lineAdded)); err != nil {
+		toLog(logLevel, 3, fmt.Sprintf("Error with filling scsq_logtable: %v", err))
 	}
 
 	_ = printTime("", t)
@@ -382,6 +383,6 @@ func (s *storeType) writeToDBTech(cfg *configType, numStart, numEnd int) error {
 }
 
 func printTime(text string, t time.Time) time.Time {
-	fmt.Printf("\texecution time:%v\n%v %v", time.Since(t), time.Now().Format("2006-01-02T15:04:05.000"), text)
+	fmt.Printf("\texecution time:%v\n%v %v", time.Since(t), time.Now().Format("2006-01-02 15:04:05.000"), text)
 	return time.Now()
 }
