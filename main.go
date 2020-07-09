@@ -187,7 +187,7 @@ func (s *storeType) squidLog2DBbyLine(scanner *bufio.Scanner, cfg *configType) e
 		}
 		cfg.lineAdded = cfg.lineAdded + 1
 
-		fmt.Printf("Lines read: %v, lines added: %v.", cfg.lineRead, cfg.lineAdded)
+		fmt.Printf("\rLines read: %v, lines added: %v.", cfg.lineRead, cfg.lineAdded)
 
 	}
 	// fmt.Printf("\n")
