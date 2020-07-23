@@ -97,7 +97,8 @@ func init() {
 
 func main() {
 	config.startTime = time.Now()
-	fmt.Printf("\n%v - Start All Job.\n", config.startTime.Format("2006-01-02 15:04:05.000"))
+
+	// fmt.Printf("\n%v - Start All Job.\n", config.startTime.Format("2006-01-02 15:04:05.000"))
 
 	// dsn := "user:password@(host_bd)/dbname"
 	// db, err := sql.Open("mysql", dsn)
@@ -154,7 +155,7 @@ func (s *storeType) prepareDB(lastDay string, numProxy int) error {
 }
 
 func (s *storeType) squidLog2DBbyLine(scanner *bufio.Scanner, cfg *configType) error {
-	fmt.Printf("\n")
+	// fmt.Printf("\n")
 	for scanner.Scan() { // Проходим по всему файлу до конца
 		cfg.lineRead = cfg.lineRead + 1
 		// cfg.lineAdded = cfg.lineAdded + 1
@@ -267,22 +268,22 @@ func (s *storeType) writeToDBTech(cfg *configType, numStart, numEnd int) error {
 	lineAdded := cfg.lineAdded
 	logLevel := cfg.logLevel
 
-	t := printTime("Start filling httpstatus, ", cfg.startTime)
+	t := printTime("Start filling httpstatus, ", cfg.startTime, logLevel)
 	if _, err := s.db.Exec("INSERT INTO scsq_httpstatus (name) (select tmp.httpstatus from (select distinct httpstatus FROM scsq_temptraffic) as tmp left outer join scsq_httpstatus on tmp.httpstatus=scsq_httpstatus.name where scsq_httpstatus.name is null);"); err != nil {
 		toLog(logLevel, 3, fmt.Sprintf("Error filling httpstatus: %v", err))
 	}
 
-	t = printTime("Start filling scsq_ipaddress, ", t)
+	t = printTime("Start filling scsq_ipaddress, ", t, logLevel)
 	if _, err := s.db.Exec("insert into scsq_ipaddress (name) (select tmp.ipaddress from (select distinct ipaddress from scsq_temptraffic) as tmp left outer join scsq_ipaddress on tmp.ipaddress=scsq_ipaddress.name where scsq_ipaddress.name is null);"); err != nil {
 		toLog(logLevel, 3, fmt.Sprintf("Error filling scsq_ipaddress: %v", err))
 	}
 
-	t = printTime("Start filling scsq_logins, ", t)
+	t = printTime("Start filling scsq_logins, ", t, logLevel)
 	if _, err := s.db.Exec("insert into scsq_logins (name) (select tmp.login from (select distinct login from scsq_temptraffic) as tmp left outer join scsq_logins on tmp.login=scsq_logins.name where scsq_logins.name is null);"); err != nil {
 		toLog(logLevel, 3, fmt.Sprintf("Error filling scsq_logins: %v", err))
 	}
 
-	t = printTime("Start filling scsq_traffic, ", t)
+	t = printTime("Start filling scsq_traffic, ", t, logLevel)
 	if _, err := s.db.Exec(`insert into scsq_traffic (date,ipaddress,login,httpstatus,sizeinbytes,site,method,mime,numproxy) select date,tmp.id,scsq_logins.id,scsq_httpstatus.id,sizeinbytes,site,method,mime,numproxy from scsq_temptraffic
 	LEFT JOIN (select id,name from scsq_ipaddress
 	RIGHT JOIN (select distinct ipaddress from scsq_temptraffic) as tt ON scsq_ipaddress.name=tt.ipaddress) as tmp ON scsq_temptraffic.ipaddress=tmp.name
@@ -292,13 +293,13 @@ func (s *storeType) writeToDBTech(cfg *configType, numStart, numEnd int) error {
 		toLog(logLevel, 3, fmt.Sprintf("Error filling scsq_traffic: %v", err))
 	}
 
-	t = printTime("Start delete from scsq_temptraffic, ", t)
+	t = printTime("Start delete from scsq_temptraffic, ", t, logLevel)
 	if _, err := s.db.Exec(`delete from scsq_temptraffic where numproxy=?`, numOfProxy); err != nil {
 		toLog(logLevel, 3, fmt.Sprintf("Error deleting from scsq_temptraffic: %v", err))
 	}
 
 	// Starting update scsq_quicktraffic
-	t = printTime("Start filling scsq_quicktraffic, ", t)
+	t = printTime("Start filling scsq_quicktraffic, ", t, logLevel)
 
 	if _, err := s.db.Exec(`insert into scsq_quicktraffic (date,login,ipaddress,sizeinbytes,site,httpstatus,par, numproxy)
 	SELECT 
@@ -335,7 +336,7 @@ func (s *storeType) writeToDBTech(cfg *configType, numStart, numEnd int) error {
 	}
 
 	// update2 scsq_quicktraffic
-	t = printTime("Start update2 scsq_quicktraffic, ", t)
+	t = printTime("Start update2 scsq_quicktraffic, ", t, logLevel)
 	if _, err := s.db.Exec(`insert into scsq_quicktraffic (date,login,ipaddress,sizeinbytes,site,par, numproxy)
 	SELECT 
 	tmp2.date,
@@ -368,7 +369,7 @@ func (s *storeType) writeToDBTech(cfg *configType, numStart, numEnd int) error {
 		toLog(logLevel, 3, fmt.Sprintf("Error updating scsq_quicktraffic: %v", err))
 	}
 
-	t = printTime("Start filling scsq_logtable, ", t)
+	t = printTime("Start filling scsq_logtable, ", t, logLevel)
 	cfg.endTime = time.Now()
 	// #fill scsq_logtable
 	if _, err := s.db.Exec(`insert into scsq_logtable (datestart,dateend,message) VALUES (?, ?, ?);`,
@@ -376,13 +377,15 @@ func (s *storeType) writeToDBTech(cfg *configType, numStart, numEnd int) error {
 		toLog(logLevel, 3, fmt.Sprintf("Error with filling scsq_logtable: %v", err))
 	}
 
-	_ = printTime("", t)
-	fmt.Printf(" The execution time of All Job: %v\n", time.Since(cfg.startTime))
+	_ = printTime("", t, logLevel)
+	toLog(logLevel, 1, fmt.Sprintf("go-fetch | execution time: %v", time.Since(cfg.startTime)))
+	// fmt.Printf(" The execution time of All Job: %v\n", time.Since(cfg.startTime))
 
 	return nil
 }
 
-func printTime(text string, t time.Time) time.Time {
-	fmt.Printf("\texecution time:%v\n%v %v", time.Since(t), time.Now().Format("2006-01-02 15:04:05.000"), text)
+func printTime(text string, t time.Time, logLevel int) time.Time {
+	toLog(logLevel, 2, fmt.Sprintf("execution time:%v\n%v %v", time.Since(t), time.Now().Format("2006-01-02 15:04:05.000"), text))
+	// fmt.Printf("\texecution time:%v\n%v %v", time.Since(t), time.Now().Format("2006-01-02 15:04:05.000"), text)
 	return time.Now()
 }
