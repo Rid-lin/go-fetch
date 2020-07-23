@@ -174,7 +174,7 @@ func (s *storeType) squidLog2DBbyLine(scanner *bufio.Scanner, cfg *configType) e
 			continue
 		}
 
-		if cfg.lastDate >= lineOut.date {
+		if cfg.lastDate > lineOut.date {
 			toLog(cfg.logLevel, 4, "line too old\r")
 			// fmt.Printf("line too old\r")
 			continue
