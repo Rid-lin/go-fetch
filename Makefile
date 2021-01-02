@@ -13,9 +13,11 @@ run: build
 	
 .DUFAULT_GOAL := build
 
+.PHONY: pack
 pack:
 	upx --ultra-brute build\go-fetch*
 
+.PHONY: mod
 mod:
 	go mod tidy
 	go mod download
