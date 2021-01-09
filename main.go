@@ -399,8 +399,8 @@ func (s *storeType) writeToDBTech(cfg *configType, numStart, numEnd int) error {
 	}
 
 	_ = printTime("", t)
-	fmt.Printf("\n")
-	log.Errorf("go-fetch | execution time:%.8v", time.Since(cfg.startTime))
+	// fmt.Printf("\n")
+	log.Infof("go-fetch | execution time:%.8v", time.Since(cfg.startTime))
 
 	return nil
 }
