@@ -128,8 +128,7 @@ func main() {
 	lastDate, _ := strconv.ParseInt(config.lastDay, 10, 64)
 	log.Debugf("config.lastDate:%v, lastDate::%v, config.NumPrnoxy:%v", config.lastDate, time.Unix(lastDate, 0), config.NumPrnoxy)
 
-	err0 := store.prepareDB(config.lastDay, config.NumPrnoxy)
-	if err0 != nil {
+	if err := store.prepareDB(config.lastDay, config.NumPrnoxy); err != nil {
 		log.Fatal("Error delete old data", err)
 	}
 
@@ -221,9 +220,6 @@ func (s *transport) squidLog2DBbyLine(scanner *bufio.Scanner, cfg *Config) error
 	var arrayOfLineOut []lineOfLogType
 	for scanner.Scan() { // Проходим по всему файлу до конца
 		cfg.lineRead = cfg.lineRead + 1
-		// cfg.lineAdded = cfg.lineAdded + 1
-		// fmt.Printf("\rAttempt to add a line: %v - ", cfg.lineAdded)
-
 		line := scanner.Text() // получем текст из линии
 		if line == "" {
 			continue
@@ -231,16 +227,14 @@ func (s *transport) squidLog2DBbyLine(scanner *bufio.Scanner, cfg *Config) error
 		line = replaceQuotes(line)
 		ProgressLine(cfg, "", 0)
 
-		lineOut, err := s.parseLineToStruct(line)
+		lineOut, err := parseLineToStruct(line)
 		if err != nil {
-			log.Errorf("%v\n", err)
-			// fmt.Printf("%v\n", err)
+			log.Errorf("(%v) %v\n", lineOut, err)
 			continue
 		}
 
 		if cfg.lastDate > lineOut.date {
-			log.Trace("line too old\r")
-			// fmt.Printf("line too old\r")
+			log.Tracef("line(%v) too old\r", lineOut)
 			continue
 		}
 		arrayOfLineOut = append(arrayOfLineOut, lineOut)
@@ -260,8 +254,6 @@ func (s *transport) squidLog2DBbyLine(scanner *bufio.Scanner, cfg *Config) error
 		log.Errorf("Error in s.writeToDBTech:%v", err)
 	}
 
-	// fmt.Printf("\n")
-	// fmt.Printf("\r%v\r", strings.Repeat(" ", 80))
 	if err := scanner.Err(); err != nil {
 		log.Errorf("%v", err)
 		return err
@@ -289,36 +281,18 @@ func ProgressLine(cfg *Config, text string, since time.Duration) {
 	fmt.Print(str)
 }
 
-// func ProgressLine(cfg *Config, text string, since time.Duration) {
-// 	var str string
-// 	if text == "" && since == 0 {
-// 		str = fmt.Sprintf("\r%v Lines read/added: %v/%v.", time.Now().Format("2006/01/02 15:04:05"), cfg.lineRead, cfg.lineAdded)
-// 	} else {
-// 		str = fmt.Sprintf("\r%v Lines read/added: %v/%v. %v:%v", time.Now().Format("2006/01/02 15:04:05"), cfg.lineRead, cfg.lineAdded, text, since)
-// 	}
-// 	if len(str) > cfg.maxLen {
-// 		cfg.maxLen = len(str)
-// 	} else {
-// 		str = str + strings.Repeat(" ", cfg.maxLen-len(str))
-// 	}
-// 	fmt.Print(str)
-// }
-
 func replaceQuotes(lineOld string) string {
 	lineNew := strings.ReplaceAll(lineOld, "'", "&quot")
 	line := strings.ReplaceAll(lineNew, `"`, "&quot")
 	return line
 }
 
-func (s *transport) parseLineToStruct(line string) (lineOfLogType, error) {
+func parseLineToStruct(line string) (lineOfLogType, error) {
 	var lineOut lineOfLogType
 	valueArray := strings.Fields(line) // разбиваем на поля через пробел
 	if len(valueArray) == 0 {          // проверяем длину строки, чтобы убедиться что строка нормально распарсилась\её формат
-		return lineOut, fmt.Errorf("Error, string is empty") // если это не так то следующая линия
+		return lineOut, fmt.Errorf("Error, line is NOT squid-log") // если это не так то следующая линия
 	}
-	// if config.lastDate <= valueArray[0] {
-	// 	return lineOut, fmt.Errorf("This is line already in DB")
-	// }
 	lineOut.date = valueArray[0]
 	lineOut.ipaddress = valueArray[2]
 	lineOut.httpstatus = valueArray[3]
@@ -329,20 +303,6 @@ func (s *transport) parseLineToStruct(line string) (lineOfLogType, error) {
 	lineOut.mime = valueArray[9]
 	return lineOut, nil
 }
-
-// func (s *storeType) writeLineToDB(lineOut lineOfLogType, numOfProxy int) error {
-// 	stmt, err := s.db.Prepare("INSERT INTO scsq_temptraffic (date,ipaddress,httpstatus,sizeinbytes,site,login,method,mime, numproxy) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)")
-// 	if err != nil {
-// 		return err
-// 	}
-// 	defer stmt.Close()
-// 	v := lineOut
-// 	_, err2 := stmt.Exec(v.date, v.ipaddress, v.httpstatus, v.sizeInBytes, v.siteName, v.login, v.method, v.mime, numOfProxy)
-// 	if err2 != nil {
-// 		return err
-// 	}
-// 	return nil
-// }
 
 func (s *transport) writeArrayToDB(arrayOfLineOut []lineOfLogType, cfg *Config) error {
 	stmt, err := s.db.Prepare("INSERT INTO scsq_temptraffic (date,ipaddress,httpstatus,sizeinbytes,site,login,method,mime, numproxy) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)")
